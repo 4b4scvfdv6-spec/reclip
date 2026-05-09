@@ -1,21 +1,29 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { api } from '../lib/api';
+import { useEffect, useState } from "react";
+import { api } from "../lib/api";
+import { Video, Upload, Check, CircleAlert } from "lucide-react";
+import { cn } from "../lib/utils";
 
 type CtaConfig = { title: string; subtitle: string; videoUrl: string };
 
-export function TopCtaBanner({ onCtaChange }: { onCtaChange?: (videoUrl: string | null) => void }) {
+export function TopCtaBanner({
+  onCtaChange,
+}: {
+  onCtaChange?: (videoUrl: string | null) => void;
+}) {
   const [cta, setCta] = useState<CtaConfig | null>(null);
-  const [videoUrlInput, setVideoUrlInput] = useState('');
-  const [status, setStatus] = useState('');
-  const [error, setError] = useState('');
+  const [videoUrlInput, setVideoUrlInput] = useState("");
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">(
+    "idle"
+  );
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    api<CtaConfig>('/cta/config')
+    api<CtaConfig>("/cta/config")
       .then((data) => {
         setCta(data);
-        setVideoUrlInput(data.videoUrl || '');
+        setVideoUrlInput(data.videoUrl || "");
       })
       .catch(() => undefined);
   }, []);
@@ -24,64 +32,129 @@ export function TopCtaBanner({ onCtaChange }: { onCtaChange?: (videoUrl: string 
     onCtaChange?.(cta?.videoUrl ? cta.videoUrl : null);
   }, [cta, onCtaChange]);
 
-  if (!cta) {
-    return null;
-  }
-
   const onClick = async () => {
-    await api('/cta/click', { method: 'POST' });
+    await api("/cta/click", { method: "POST" });
   };
 
   const saveVideo = async () => {
-    setError('');
-    setStatus('');
+    setError("");
+    setStatus("saving");
     try {
-      const data = await api<{ videoUrl: string }>('/cta/video', {
-        method: 'POST',
-        body: JSON.stringify({ videoUrl: videoUrlInput.trim() })
+      const data = await api<{ videoUrl: string }>("/cta/video", {
+        method: "POST",
+        body: JSON.stringify({ videoUrl: videoUrlInput.trim() }),
       });
       setCta((prev) =>
         prev
           ? {
               ...prev,
-              videoUrl: data.videoUrl
+              videoUrl: data.videoUrl,
             }
           : prev
       );
-      setStatus('CTA video updated.');
+      setStatus("saved");
+      setTimeout(() => setStatus("idle"), 2000);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save CTA video');
+      setStatus("error");
+      setError(e instanceof Error ? e.message : "Failed to save CTA video");
     }
   };
 
-  return (
-    <div style={{ background: '#111827', color: '#fff', padding: 16, borderRadius: 8, marginBottom: 16 }}>
-      <strong>{cta.title}</strong>
-      <p style={{ margin: '8px 0 12px' }}>{cta.subtitle}</p>
-      <div style={{ display: 'grid', gap: 8, marginBottom: 10 }}>
-        <input
-          value={videoUrlInput}
-          onChange={(e) => setVideoUrlInput(e.target.value)}
-          placeholder="Paste CTA video URL (mp4)"
-        />
-        <div>
-          <button onClick={saveVideo}>Save CTA Video</button>
-          {status ? <span style={{ marginLeft: 10 }}>{status}</span> : null}
-        </div>
-        {error ? <p style={{ color: '#fca5a5', margin: 0 }}>{error}</p> : null}
+  if (!cta) {
+    return (
+      <div className="rounded-xl bg-card border border-border p-6 mb-6 animate-pulse">
+        <div className="h-6 w-48 bg-muted rounded mb-2" />
+        <div className="h-4 w-64 bg-muted rounded" />
       </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl bg-gradient-to-br from-card to-card/80 border border-border overflow-hidden mb-6">
+      <div className="p-6">
+        <div className="flex items-start gap-4">
+          <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+            <Video className="w-6 h-6 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg font-semibold text-foreground">
+              {cta.title}
+            </h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {cta.subtitle}
+            </p>
+
+            <div className="mt-4 flex flex-col sm:flex-row gap-3">
+              <div className="flex-1">
+                <input
+                  value={videoUrlInput}
+                  onChange={(e) => setVideoUrlInput(e.target.value)}
+                  placeholder="https://example.com/your-cta-video.mp4"
+                  className="w-full px-4 py-2.5 rounded-lg bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                />
+              </div>
+              <button
+                onClick={saveVideo}
+                disabled={status === "saving"}
+                className={cn(
+                  "flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-all",
+                  status === "saved"
+                    ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                    : status === "error"
+                      ? "bg-destructive/20 text-destructive border border-destructive/30"
+                      : "bg-primary text-primary-foreground hover:bg-primary/90"
+                )}
+              >
+                {status === "saving" ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    Saving...
+                  </>
+                ) : status === "saved" ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    Saved
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" />
+                    Save CTA Video
+                  </>
+                )}
+              </button>
+            </div>
+
+            {error && (
+              <div className="mt-3 flex items-center gap-2 text-sm text-destructive">
+                <CircleAlert className="w-4 h-4" />
+                {error}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {cta.videoUrl ? (
-        <video
-          controls
-          preload="metadata"
-          style={{ width: '100%', maxHeight: 320, borderRadius: 8, background: '#000' }}
-          onPlay={onClick}
-        >
-          <source src={cta.videoUrl} type="video/mp4" />
-          Your browser does not support the CTA video.
-        </video>
+        <div className="border-t border-border bg-black/20">
+          <video
+            controls
+            preload="metadata"
+            className="w-full max-h-[320px] object-contain"
+            onPlay={onClick}
+          >
+            <source src={cta.videoUrl} type="video/mp4" />
+            Your browser does not support the CTA video.
+          </video>
+        </div>
       ) : (
-        <p style={{ margin: 0, opacity: 0.9 }}>No CTA video set yet. Paste a video URL and save.</p>
+        <div className="border-t border-border bg-muted/30 p-8 flex flex-col items-center justify-center text-center">
+          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+            <Video className="w-8 h-8 text-muted-foreground" />
+          </div>
+          <p className="text-muted-foreground">
+            No CTA video set yet. Paste a video URL above and save.
+          </p>
+        </div>
       )}
     </div>
   );
