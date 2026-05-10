@@ -116,7 +116,11 @@ export async function fetchYouTubeVideos(channelId: string, handle: string, limi
       const publishedAt =
         typeof entry.timestamp === 'number'
           ? new Date(entry.timestamp * 1000).toISOString()
-          : parseUploadDate(entry.upload_date);
+          : (entry.upload_date
+              ? new Date(
+                  `${entry.upload_date.slice(0, 4)}-${entry.upload_date.slice(4, 6)}-${entry.upload_date.slice(6, 8)}`
+                ).toISOString()
+              : new Date().toISOString());
 
       byId.set(entry.id, {
         id: `yt_${entry.id}`,
