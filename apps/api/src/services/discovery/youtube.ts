@@ -33,14 +33,32 @@ function normalizeYouTubeInput(handleOrUrl: string): string {
   return `https://www.youtube.com/@${cleanHandle}`;
 }
 
-function parseUploadDate(uploadDate?: string): string {
-  if (!uploadDate || uploadDate.length !== 8) {
-    return new Date().toISOString();
+function normalizeYouTubeUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname !== 'www.youtube.com') {
+      return url; // Not a YouTube URL, return as-is
+    }
+
+    // Extract video ID from various YouTube URL formats
+    let videoId = '';
+
+    if (parsed.pathname.startsWith('/watch')) {
+      videoId = parsed.searchParams.get('v') || '';
+    } else if (parsed.pathname.startsWith('/shorts/')) {
+      videoId = parsed.pathname.split('/shorts/')[1]?.split('/')[0] || '';
+    } else if (parsed.pathname.startsWith('/v/')) {
+      videoId = parsed.pathname.split('/v/')[1]?.split('/')[0] || '';
+    }
+
+    if (videoId) {
+      return `https://www.youtube.com/watch?v=${videoId}`;
+    }
+
+    return url; // Couldn't extract video ID, return original
+  } catch {
+    return url; // Invalid URL, return as-is
   }
-  const year = uploadDate.slice(0, 4);
-  const month = uploadDate.slice(4, 6);
-  const day = uploadDate.slice(6, 8);
-  return new Date(`${year}-${month}-${day}T00:00:00.000Z`).toISOString();
 }
 
 async function fetchPlaylistEntries(url: string): Promise<YtDlpEntry[]> {
@@ -92,8 +110,9 @@ export async function fetchYouTubeVideos(channelId: string, handle: string, limi
       if (!entry.id) {
         continue;
       }
-      const sourceUrl =
-        entry.webpage_url || (entry.url ? `https://www.youtube.com/watch?v=${entry.url}` : `https://www.youtube.com/watch?v=${entry.id}`);
+      const sourceUrl = normalizeYouTubeUrl(
+        entry.webpage_url || (entry.url ? `https://www.youtube.com/watch?v=${entry.url}` : `https://www.youtube.com/watch?v=${entry.id}`)
+      );
       const publishedAt =
         typeof entry.timestamp === 'number'
           ? new Date(entry.timestamp * 1000).toISOString()
