@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { config } from '../lib/config.js';
 import { db } from '../lib/db.js';
+import { makeId } from '../lib/id.js';
+import { enqueue } from '../queue/producer.js';
 
 const schema = z.object({
   urls: z.array(z.string().url()).min(1),
@@ -26,16 +28,59 @@ stitchRouter.post('/', async (req, res) => {
   try {
     const { urls, ctaUrl, audioUrl } = parsed.data;
 
+    const downloadJobs = [];
+    for (const url of urls) {
+      if (url.includes('youtube.com') || url.includes('youtu.be')) {
+        const job = {
+          id: makeId(),
+          type: 'single' as const,
+          videoIds: [],
+          status: 'queued' as const,
+          progress: 0,
+          outputUrls: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        db.jobs.set(job.id, job);
+        enqueue(job);
+        downloadJobs.push({ job, sourceUrl: url });
+      }
+    }
+
+    const maxWaitTime = 5 * 60 * 1000;
+    const startTime = Date.now();
+
+    while (downloadJobs.some(({ job }) => db.jobs.get(job.id)?.status !== 'done')) {
+      if (Date.now() - startTime > maxWaitTime) {
+        return res.status(408).json({ error: 'Download timeout' });
+      }
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+
+    const downloadableUrls: string[] = [];
+    for (const { job } of downloadJobs) {
+      const completedJob = db.jobs.get(job.id);
+      if (completedJob?.status === 'done') {
+        const fileUrl = `${config.API_BASE_URL}/downloads/file/${job.id}/0`;
+        downloadableUrls.push(fileUrl);
+      }
+    }
+
+    for (const url of urls) {
+      if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
+        downloadableUrls.push(url);
+      }
+    }
+
     const headers: Record<string, string> = { 'content-type': 'application/json' };
     if (config.FFMPEG_API_KEY) {
       headers.authorization = `Bearer ${config.FFMPEG_API_KEY}`;
     }
 
     if (ctaUrl) {
-      // Stitch each short individually with the CTA video appended
       const stitchedBlobs: Buffer[] = [];
 
-      for (const shortUrl of urls) {
+      for (const shortUrl of downloadableUrls) {
         const stitchResponse = await fetch(config.FFMPEG_API_URL, {
           method: 'POST',
           headers,
@@ -63,7 +108,7 @@ stitchRouter.post('/', async (req, res) => {
       const response = await fetch(config.FFMPEG_API_URL, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ urls, audioUrl })
+        body: JSON.stringify({ urls: downloadableUrls, audioUrl })
       });
 
       if (!response.ok) {
