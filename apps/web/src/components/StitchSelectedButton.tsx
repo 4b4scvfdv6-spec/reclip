@@ -1,7 +1,4 @@
-'use client';
-
-import { useState } from 'react';
-import { apiBlob } from '../lib/api';
+import { api } from '../lib/api';
 
 export function StitchSelectedButton({ selectedUrls, ctaUrl }: { selectedUrls: string[]; ctaUrl?: string | null }) {
   const [audioUrl, setAudioUrl] = useState('');
@@ -16,24 +13,14 @@ export function StitchSelectedButton({ selectedUrls, ctaUrl }: { selectedUrls: s
     try {
       if (ctaUrl) {
         // When CTA is provided, expect multiple videos back
-        const response = await fetch('/api/stitch', {
+        const data = await api<{ videos: Array<{ filename: string; data: string; contentType: string }> }>('/stitch', {
           method: 'POST',
-          headers: {
-            'content-type': 'application/json'
-          },
           body: JSON.stringify({
             urls: selectedUrls,
             ctaUrl: ctaUrl,
             audioUrl: audioUrl.trim() ? audioUrl.trim() : null
           })
         });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Stitching failed');
-        }
-
-        const data = await response.json();
         
         // Download each stitched video
         data.videos.forEach((video: any, index: number) => {
