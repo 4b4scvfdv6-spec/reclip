@@ -34,7 +34,7 @@ MAX_VIDEOS_PER_REFRESH=50
 MAX_BULK_DOWNLOAD=100
 ```
 
-`WEB_ORIGIN` can be comma-separated if you have preview and production domains.
+`WEB_ORIGIN` can be comma-separated if you have preview and production domains. Use only the origin, with one scheme and no path, for example `https://endearing-piroshki-79005a.netlify.app`.
 
 YouTube channel discovery requires `yt-dlp` in the API runtime. If the host does not install it, adding a YouTube channel will fail with:
 
@@ -64,7 +64,9 @@ Required production env:
 NEXT_PUBLIC_API_BASE_URL=https://your-api-domain.example
 ```
 
-Do not use `localhost` in production env vars. A deployed browser treats `localhost` as the visitor's machine, not your API service.
+For the current Render API, set `NEXT_PUBLIC_API_BASE_URL=https://reclip-3r8w.onrender.com`.
+
+Do not use `localhost` in production env vars. A deployed browser treats `localhost` as the visitor's machine, not your API service. `NEXT_PUBLIC_*` values are baked into the Next.js browser bundle at build time, so redeploy the web app after changing this value.
 
 ## Important
 
