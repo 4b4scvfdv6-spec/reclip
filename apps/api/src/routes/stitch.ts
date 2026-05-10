@@ -31,7 +31,7 @@ stitchRouter.post('/', async (req, res) => {
       // Check if this is a YouTube URL that needs downloading
       if (url.includes('youtube.com') || url.includes('youtu.be')) {
         // Find the video ID in our database
-        const video = Array.from(db.videos.values()).find(v => v.url === url);
+        const video = Array.from(db.videos.values()).find(v => v.sourceUrl === url);
         if (!video) {
           return res.status(400).json({ error: `Video not found in database: ${url}` });
         }
@@ -57,7 +57,7 @@ stitchRouter.post('/', async (req, res) => {
     const maxWaitTime = 5 * 60 * 1000; // 5 minutes
     const startTime = Date.now();
 
-    while (downloadJobs.some(job => db.jobs.get(job.id)?.status !== 'completed')) {
+    while (downloadJobs.some(job => db.jobs.get(job.id)?.status !== 'done')) {
       if (Date.now() - startTime > maxWaitTime) {
         return res.status(408).json({ error: 'Download timeout - videos taking too long to download' });
       }
@@ -68,7 +68,7 @@ stitchRouter.post('/', async (req, res) => {
     const downloadableUrls = [];
     for (const job of downloadJobs) {
       const completedJob = db.jobs.get(job.id);
-      if (completedJob?.status === 'completed') {
+      if (completedJob?.status === 'done') {
         // Generate URL for each downloaded video in the job
         for (let i = 0; i < completedJob.videoIds.length; i++) {
           const fileUrl = `${config.API_BASE_URL}/downloads/file/${job.id}/${i}`;
