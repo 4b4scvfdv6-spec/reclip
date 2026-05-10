@@ -1,3 +1,6 @@
+'use client';
+
+import { useState } from 'react';
 import { api } from '../lib/api';
 
 export function StitchSelectedButton({ selectedUrls, ctaUrl }: { selectedUrls: string[]; ctaUrl?: string | null }) {
