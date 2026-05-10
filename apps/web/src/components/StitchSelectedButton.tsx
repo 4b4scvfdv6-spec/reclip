@@ -14,7 +14,7 @@ export function StitchSelectedButton({ selectedUrls, ctaUrl }: { selectedUrls: s
     setError('');
     setStatus('Stitching selected shorts to CTA...');
     try {
-      const blob = await apiBlob('/stitch/submit', {
+      const blob = await apiBlob('/stitch', {
         method: 'POST',
         body: JSON.stringify({
           urls: stitchUrls,

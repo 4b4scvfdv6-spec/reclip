@@ -10,7 +10,7 @@ const schema = z.object({
 
 export const stitchRouter = Router();
 
-stitchRouter.post('/submit', async (req, res) => {
+stitchRouter.post('/', async (req, res) => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
