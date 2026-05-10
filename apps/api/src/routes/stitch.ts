@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { config } from '../lib/config.js';
 import { db } from '../lib/db.js';
+import { makeId } from '../lib/id.js';
+import { enqueue } from '../queue/producer.js';
 
 const schema = z.object({
   urls: z.array(z.string().url()).min(1),
@@ -23,6 +25,66 @@ stitchRouter.post('/', async (req, res) => {
   }
 
   try {
+    // Step 1: Create download jobs for all YouTube URLs
+    const downloadJobs = [];
+    for (const url of parsed.data.urls) {
+      // Check if this is a YouTube URL that needs downloading
+      if (url.includes('youtube.com') || url.includes('youtu.be')) {
+        // Find the video ID in our database
+        const video = Array.from(db.videos.values()).find(v => v.url === url);
+        if (!video) {
+          return res.status(400).json({ error: `Video not found in database: ${url}` });
+        }
+
+        // Create download job
+        const job = {
+          id: makeId(),
+          type: 'single' as const,
+          videoIds: [video.id],
+          status: 'queued' as const,
+          progress: 0,
+          outputUrls: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        db.jobs.set(job.id, job);
+        enqueue(job);
+        downloadJobs.push(job);
+      }
+    }
+
+    // Step 2: Wait for all downloads to complete (with timeout)
+    const maxWaitTime = 5 * 60 * 1000; // 5 minutes
+    const startTime = Date.now();
+
+    while (downloadJobs.some(job => db.jobs.get(job.id)?.status !== 'completed')) {
+      if (Date.now() - startTime > maxWaitTime) {
+        return res.status(408).json({ error: 'Download timeout - videos taking too long to download' });
+      }
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+    }
+
+    // Step 3: Generate public URLs for downloaded videos
+    const downloadableUrls = [];
+    for (const job of downloadJobs) {
+      const completedJob = db.jobs.get(job.id);
+      if (completedJob?.status === 'completed') {
+        // Generate URL for each downloaded video in the job
+        for (let i = 0; i < completedJob.videoIds.length; i++) {
+          const fileUrl = `${config.API_BASE_URL}/downloads/file/${job.id}/${i}`;
+          downloadableUrls.push(fileUrl);
+        }
+      }
+    }
+
+    // Add any non-YouTube URLs (like CTA videos) directly
+    for (const url of parsed.data.urls) {
+      if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
+        downloadableUrls.push(url);
+      }
+    }
+
+    // Step 4: Send downloadable URLs to stitch API
     const headers: Record<string, string> = {
       'content-type': 'application/json'
     };
@@ -30,10 +92,15 @@ stitchRouter.post('/', async (req, res) => {
       headers.authorization = `Bearer ${config.FFMPEG_API_KEY}`;
     }
 
+    const stitchPayload = {
+      urls: downloadableUrls,
+      audioUrl: parsed.data.audioUrl
+    };
+
     const response = await fetch(config.FFMPEG_API_URL, {
       method: 'POST',
       headers,
-      body: JSON.stringify(parsed.data)
+      body: JSON.stringify(stitchPayload)
     });
 
     if (!response.ok) {
